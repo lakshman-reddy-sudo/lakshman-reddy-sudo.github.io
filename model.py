@@ -22,6 +22,11 @@ from sklearn.ensemble import (
 )
 from sklearn.svm import SVC
 from sklearn.calibration import CalibratedClassifierCV
+try:
+    from sklearn.frozen import FrozenEstimator
+    HAS_FROZEN = True
+except ImportError:
+    HAS_FROZEN = False
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 
@@ -156,7 +161,12 @@ def train_model():
     base_model.fit(X_train, y_train)
 
     # Confidence Calibration using CalibratedClassifierCV
-    calibrated_model = CalibratedClassifierCV(base_model, cv="prefit", method="sigmoid")
+    if HAS_FROZEN:
+        # scikit-learn >= 1.8: cv='prefit' removed, use FrozenEstimator
+        calibrated_model = CalibratedClassifierCV(FrozenEstimator(base_model), method="sigmoid")
+    else:
+        # scikit-learn < 1.8: use cv='prefit'
+        calibrated_model = CalibratedClassifierCV(base_model, cv="prefit", method="sigmoid")
     calibrated_model.fit(X_train, y_train)
 
     # Evaluate with calibrated model
