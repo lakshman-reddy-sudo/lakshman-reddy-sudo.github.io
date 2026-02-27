@@ -88,8 +88,11 @@ async function analyzeSymptoms() {
             <div class="loading-text">Analyzing symptom patterns...</div>
         </div>`;
 
+    const ehr = getEHRContext();
+
+    // Try Flask backend first, fall back to client-side ML engine
+    let data = null;
     try {
-        const ehr = getEHRContext();
         const body = { symptoms, top_k: 5 };
         if (ehr.age) body.age = ehr.age;
         if (ehr.sex) body.sex = ehr.sex;
@@ -101,28 +104,38 @@ async function analyzeSymptoms() {
             body: JSON.stringify(body),
         });
 
-        if (!response.ok) {
-            const err = await response.json();
-            throw new Error(err.error || 'Failed to analyze symptoms');
+        if (!response.ok) throw new Error('Backend unavailable');
+        data = await response.json();
+    } catch (_) {
+        // Backend unavailable → use client-side ML engine
+        if (mlEngine && mlEngine.ready) {
+            const predictions = mlEngine.predict(
+                symptoms, 5, ehr.age, ehr.sex, ehr.medical_history
+            );
+            data = {
+                predictions,
+                input_symptoms: symptoms,
+                ehr_context: (ehr.age || ehr.sex || ehr.medical_history) ? ehr : null,
+                disclaimer: "This is an AI-based screening tool for informational purposes only. " +
+                    "It is NOT a substitute for professional medical advice, diagnosis, or treatment.",
+            };
         }
+    }
 
-        const data = await response.json();
+    if (data) {
         renderResults(data);
-    } catch (error) {
+    } else {
         resultsContent.innerHTML = `
             <div class="results-placeholder">
-                <div class="results-placeholder-icon">🖥️</div>
+                <div class="results-placeholder-icon">⏳</div>
                 <div class="results-placeholder-text" style="color: var(--accent-amber);">
-                    Live symptom analysis requires the backend server.<br>
-                    <span style="font-size:0.82rem;color:var(--text-muted);margin-top:0.5rem;display:block;">
-                        Run <code style="background:rgba(255,255,255,0.06);padding:0.2rem 0.5rem;border-radius:4px;">python3 app.py</code> locally to enable ML predictions.
-                    </span>
+                    ML engine is still loading, please try again in a moment.
                 </div>
             </div>`;
-    } finally {
-        analyzeBtn.disabled = false;
-        analyzeBtn.textContent = '🔍 Analyze Symptoms';
     }
+
+    analyzeBtn.disabled = false;
+    analyzeBtn.textContent = '🔍 Analyze Symptoms';
 }
 
 function showError(message) {
@@ -447,4 +460,6 @@ document.addEventListener('DOMContentLoaded', () => {
     initScrollAnimations();
     loadNDCGDashboard();
     loadBiasPanel();
+    // Initialize client-side ML engine (for static hosting fallback)
+    if (typeof mlEngine !== 'undefined') mlEngine.initialize();
 });
