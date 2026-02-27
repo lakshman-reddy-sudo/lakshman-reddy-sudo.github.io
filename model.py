@@ -211,7 +211,10 @@ def train_model():
     # Retrain on full dataset for production
     model_full = build_ensemble()
     model_full.fit(X, y)
-    calibrated_full = CalibratedClassifierCV(model_full, cv="prefit", method="sigmoid")
+    if HAS_FROZEN:
+        calibrated_full = CalibratedClassifierCV(FrozenEstimator(model_full), method="sigmoid")
+    else:
+        calibrated_full = CalibratedClassifierCV(model_full, cv="prefit", method="sigmoid")
     calibrated_full.fit(X, y)
 
     metrics = {
